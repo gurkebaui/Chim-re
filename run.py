@@ -1,8 +1,7 @@
 import logging
 from threading import Event, Thread
 from pynput import keyboard
-from chimera.agent import Agent, AgentStateModule
-
+from chimera.agent import Agent
 
 class KillSwitchListener:
     """Ein robuster Listener für die STRG + ESC Not-Aus-Kombination."""
@@ -32,37 +31,38 @@ class KillSwitchListener:
         if self.listener.running:
             self.listener.stop()
 
-from chimera.agent import Agent
-
-# Die Klasse wird umbenannt und erweitert
 class ControlListener:
-    """Überwacht Hotkeys für Lernmodus-Wechsel und Feedback-Signale."""
+    """Überwacht Hotkeys für Lernmodus-Wechsel und Feedback-Signale, global."""
     def __init__(self, agent: Agent):
         self.agent = agent
         self.listener = keyboard.Listener(on_press=self.on_press)
 
     def on_press(self, key):
-        try:
-            # ... (Feedback-Logik bleibt gleich)
-            if key.char == '+':
-                self.agent.set_reward(1.0)
-                print("\n--- Belohnung (+) registriert ---")
-            elif key.char == '-':
-                self.agent.set_reward(-1.0)
-                print("\n--- Bestrafung (-) registriert ---")
-        except AttributeError:
-            if key == keyboard.Key.f8:
-                if self.agent.state.learning_mode != 'reinforcement':
-                    self.agent.state.learning_mode = 'reinforcement'
-                    self.agent.clear_memory()
-                    self.agent.reinitialize_optimizer() # <-- OPTIMIZER ZURÜCKSETZEN
-                    print("\n--- Modus zu REINFORCEMENT (Aktiv/Lernen) gewechselt ---")
-            elif key == keyboard.Key.f9:
-                if self.agent.state.learning_mode != 'observational':
-                    self.agent.state.learning_mode = 'observational'
-                    self.agent.clear_memory()
-                    self.agent.reinitialize_optimizer() # <-- OPTIMIZER ZURÜCKSETZEN
-                    print("\n--- Modus zu OBSERVATIONAL (Passiv/Imitieren) gewechselt ---")
+        # --- START DER KORREKTUR FÜR GLOBALE TASTEN ---
+        # Wir verwenden nicht mehr try/except und key.char, sondern prüfen direkt.
+
+        # Prüfe auf Spezialtasten
+        if key == keyboard.Key.f8:
+            if self.agent.state.learning_mode != 'reinforcement':
+                self.agent.state.learning_mode = 'reinforcement'
+                self.agent.clear_memory()
+                self.agent.reinitialize_optimizer()
+                print("\n--- Modus zu REINFORCEMENT (Aktiv/Lernen) gewechselt ---")
+        elif key == keyboard.Key.f9:
+            if self.agent.state.learning_mode != 'observational':
+                self.agent.state.learning_mode = 'observational'
+                self.agent.clear_memory()
+                self.agent.reinitialize_optimizer()
+                print("\n--- Modus zu OBSERVATIONAL (Passiv/Imitieren) gewechselt ---")
+        
+        # Prüfe auf Zeichentasten als KeyCode, um sie global zu machen
+        elif key == keyboard.KeyCode.from_char('+'):
+            self.agent.add_reward_to_queue(1.0)
+            print("\n--- Belohnung (+) registriert ---")
+        elif key == keyboard.KeyCode.from_char('-'):
+            self.agent.add_reward_to_queue(-1.0)
+            print("\n--- Bestrafung (-) registriert ---")
+        # --- ENDE DER KORREKTUR ---
 
     def start(self):
         Thread(target=self.listener.run, daemon=True).start()
@@ -76,7 +76,7 @@ def main():
     agent = None
     try:
         agent = Agent(shutdown_event)
-        control_listener = ControlListener(agent) # <- Angepasste Instanziierung
+        control_listener = ControlListener(agent)
         control_listener.start()
         agent.run()
     except Exception as e:
